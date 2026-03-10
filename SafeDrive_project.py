@@ -2,6 +2,7 @@ import streamlit as st
 import spacy
 import dateparser
 from datetime import datetime
+import re 
 
 nlp = spacy.load("nl_core_news_sm")
 
@@ -22,6 +23,8 @@ if "data" not in st.session_state:
         "locatie": None,
         "schade": None
     }
+    #check doen als de ingevoerde datum correct is. Dit is een vlag voor deze check
+    st.session_state.datum_goedgekeurd = False 
 
 
 def extract_info(text):
@@ -33,7 +36,42 @@ def extract_info(text):
     locatie = None
     schade = None
 
-    parsed = dateparser.parse(text, languages=["nl"])
+    # zoek eerst een datum patroon in de tekst met regex
+    datum_patroon = re.search(r'\b(\d{1,2}[-/]\d{1,2}[-/]\d{4})\b', text)
+
+    # via regex zoeken naar tijdswoorden
+    tijdswoorden_patroon = re.search(
+        r'\b(gisteren|eergisteren|vorige week|afgelopen \w+|maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag)\b',
+        text.lower()
+    )
+
+    if datum_patroon:
+        # dit plaatst de gevonden match met re.search in een variable.
+        # datum_patroon.group() is dus de datum die re.search vind. Bv "25-03-2026"
+        gevonden_datum = datum_patroon.group()        
+
+        # Nu geven we de gevonden datum door aan dateparser zonder de rest van de zin.
+        # settings DATE_ORDER zorgt voor de EU standaard setting 
+        parsed = dateparser.parse(gevonden_datum, languages=["nl"], settings={"DATE_ORDER": "DMY"})
+
+        # als DMY niet lukt, check of het MDY (Amerikaans formaat) wel lukt
+        if not parsed:
+            parsed = dateparser.parse(gevonden_datum, languages=["nl"], settings={"DATE_ORDER": "MDY"})
+            if parsed:
+                st.info("Datum leek op Amerikaans formaat (MM/DD/YYYY) en werd automatisch omgezet.")
+    elif tijdswoorden_patroon:
+        # Gevonden tijdswoord apart aan dateparser geven
+        gevonden_tijdswoord = tijdswoorden_patroon.group()
+        parsed = dateparser.parse(gevonden_tijdswoord, languages=["nl"], settings={
+                "DATE_ORDER": "DMY",
+                "PREFER_DATES_FROM": "past"
+        })
+    else:
+        # Geen datum patroon gevonden, probeer de hele tekst
+        parsed = dateparser.parse(text, languages=["nl"], settings={
+            "DATE_ORDER": "DMY", 
+            "PREFER_DATES_FROM": "past"
+        })
 
     if parsed:
         datum = parsed.date()
@@ -71,7 +109,12 @@ if st.button("Analyseer tekst"):
     datum, tijd, locatie, schade = extract_info(text)
 
     if datum:
-        st.session_state.data["datum"] = datum
+        if datum <= datetime.today().date(): # alleen de datum opslaan als deze vandaag of in het verleden ligt
+            st.session_state.data  ["datum"] = datum
+            st.session_state.datum_goedgekeurd = True # als datum correct is, vlag op true zetten
+        else:
+            st.session_state.datum_goedgekeurd = False # als datum nogsteeds foutief is, vlag op False houden
+            st.warning("De gedetecteerde datum ligt in de toekomst. Wat het onmogelijk maakt om een schadeclaim in te voeren wat nog niet gebeurd is. Geef een geldige datum in.")
 
     if tijd:
         st.session_state.data["tijd"] = tijd
@@ -87,15 +130,19 @@ data = st.session_state.data
 
 st.subheader("Gedetecteerde gegevens")
 
-if data["datum"]:
+if data["datum"] and st.session_state.datum_goedgekeurd: # dit checked als datum ingevoerd is EN als deze een correcte waarde heeft
     st.write("Datum:", data["datum"])
 else:
-    data["datum"] = st.date_input("Voer datum in")
+    ingevoerde_datum = st.date_input("Voer een datum in.", value=None, max_value= datetime.today().date(), format="DD/MM/YYYY") # value = None zorgt ervoor dat tekstvak leeg blijft als incorrecte datum is ingevoerd en format zorgt voor een placeholder tekst in het tekstvak
+    if ingevoerde_datum:
+        data["datum"] = ingevoerde_datum
+        st.session_state.datum_goedgekeurd = True
+    #data["datum"] = st.date_input("Voer datum in", max_value=datetime.today().date())
 
 if data["tijd"]:
     st.write("Tijd:", data["tijd"])
 else:
-    data["tijd"] = st.text_input("Voer tijdstip in (bijv. namiddag of 14:00)")
+    data["tijd"] = st.text_input("Voer tijdstip in (bijv. namiddag of 14:00)", value=None)
 
 if data["locatie"]:
     st.write("Locatie:", data["locatie"])
