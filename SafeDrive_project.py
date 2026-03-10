@@ -113,9 +113,11 @@ if all(data.values()):
         st.error("Datum mag niet in de toekomst liggen")
     else:
         st.success("Alle gegevens compleet!")
+        text = st.write("Uw gegevens zijn:")
         st.write("Datum:", data["datum"])
         st.write("Tijd:", data["tijd"])
         st.write("Locatie:", data["locatie"])
         st.write("Schade:", data["schade"])
 
         
+
