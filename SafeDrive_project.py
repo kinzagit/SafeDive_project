@@ -3,6 +3,7 @@ import spacy
 import dateparser
 from datetime import datetime
 import re 
+from rapidfuzz import fuzz
 
 nlp = spacy.load("nl_core_news_sm")
 
@@ -21,11 +22,26 @@ if "data" not in st.session_state:
         "datum": None,
         "tijd": None,
         "locatie": None,
-        "schade": None
+        "schade": None,
+        "fotos": None
     }
     #check doen als de ingevoerde datum correct is. Dit is een vlag voor deze check
     st.session_state.datum_goedgekeurd = False 
 
+schade_zinnen = []
+
+# def om te checken als er spellingsfouten zijn gemaakt bij het schrijven van de tekst
+# aangeraden van een drempelwaarde van 75-80 te hebben
+def bevat_schadewoord(zin, keywords, drempel=80):
+    zin_lower = zin.lower()
+    woorden_in_zin = zin_lower.split()
+
+    for woord in woorden_in_zin:
+        for keyword in keywords:
+            score = fuzz.ratio(woord, keyword)
+            if score >= drempel:
+                return True
+    return False
 
 def extract_info(text):
 
@@ -91,11 +107,89 @@ def extract_info(text):
             locatie = ent.text
 
     # schade detectie
-    schade_keywords = ["deuk", "kras", "schade", "kapot", "bumper"]
+    schade_keywords = [
+    # bestaand
+    "deuk", "kras", "schade", "kapot", "bumper", "scheur", "gestolen", "kwijt", "ingeslaan", "gestolen",
+
+    # deuk/vervorming
+    "deuken", "deukje", "ingedeukt", "gegedeukt", "gebutst", "buts", "bluts", "geblutst",
+    "vervormd", "krom", "scheef", "knik", "plooien", "in de kreukels",
+
+    # scheur/barst
+    "scheuren", "gescheurd", "afgescheurd", "haarscheur", "doorgescheurd",
+    "barst", "barsten", "gebarsten", "haarscheurtje",
+
+    # krassen/lak
+    "krassen", "krasje", "bekrast", "lakschade", "lak weg", "lak eraf",
+    "steenslag", "clearcoat los", "verf afgebladderd", "doffe lak",
+    "schuurplek", "schuursporen", "afschilferen",
+
+    # breuk/verlies/bevestiging
+    "gebroken", "afgebroken", "los", "losgeraakt", "loshangend",
+    "bevestiging stuk", "clip stuk", "clips stuk", "weggeslagen",
+    "onderdeel weg", "missend", "verdwenen", "defect", "werkt niet",
+
+    # glas/ruiten
+    "ruitschade", "ruit ingeslagen", "ingeslagen ruit", "raam ingeslagen", "ingetikt",
+    "glasbreuk", "ruiten kapot", "raam kapot", "sterretje", "sterretjes", "chip in ruit",
+    "barst in ruit", "voorruit gebarsten", "achterruit gebarsten", "zijruit gebroken",
+    "ruit uit de sponning", "raamsponning verbogen",
+
+    # verlichting/spiegels
+    "koplamp kapot", "koplamp gebarsten", "achterlicht stuk", "mistlamp stuk",
+    "lampunit gebroken", "lampglas gebarsten", "drl kapot",
+    "spiegel kapot", "buitenspiegel afgebroken", "spiegelglas gebroken",
+    "spiegelbehuizing stuk", "spiegel los",
+
+    # sensoren/ADAS
+    "sensor stuk", "sensor werkt niet", "pdc doet het niet", "radar uit",
+    "camera uit", "kalibratie nodig", "herkalibreren", "alignment adas",
+    "storing", "storingsmelding", "foutcode", "waarschuwingslampje",
+
+    # banden/wielen/ophanging
+    "lekke band", "band lek", "band leeg", "band bult", "bandwang beschadigd",
+    "band gescheurd", "ventiel stuk", "velg beschadigd", "velg krom",
+    "stoeprandschade", "curb rash",
+    "trekt naar links", "trekt naar rechts", "stuur scheef", "trilt", "vibratie",
+    "onbalans", "uitlijning van slag", "spoorstang krom", "draagarm krom",
+    "veerpoot lek", "schokdemper lek", "wiellager geluid",
+
+    # koeling/vloeistoffen
+    "lekkage", "lekt", "olie lekt", "koelvloeistof lekt", "olieplek",
+    "radiator lek", "condensor lek", "airco doet het niet", "koelfan kapot",
+    "oververhitting", "benzinegeur", "brandstof lekt",
+
+    # sloten/inbraak/vandalisme/diefstal
+    "inbraak", "inbraakschade", "slot geforceerd", "deurslot kapot",
+    "contactslot beschadigd", "bekrast vandalisme", "spiegel afgetrapt",
+    "velg gestolen", "kentekenplaat weg", "opgebroken", "weggesleept", "auto weg",
+    "onderdeel weggenomen",
+
+    # airbags/veiligheid
+    "airbag open", "airbag uitgeklapt", "gordelspanner geactiveerd",
+    "airbag lampje", "srs storing",
+
+    # geluid/symptomen
+    "kraakt", "piept", "tikt", "rammelt", "schuurt", "zoemt", "bonkt",
+    "slaat door", "klap gehoord", "gejank", "fluittoon",
+
+    # ernst/status
+    "ernstige schade", "flinke schade", "kleine schade", "total loss",
+    "total-loss", "totalloss", "afgeschreven",
+
+    # richting/locatie (combineer met schade voor context)
+    "linker", "links", "rechter", "rechts", "voorkant", "achterkant", "zijkant",
+    "linksvoor", "rechtsvoor", "linksachter", "rechtsachter",
+    "bestuurderszijde", "passagierszijde", "neus", "kont",
+    ]
 
     for sent in doc.sents:
-        if any(w in sent.text.lower() for w in schade_keywords):
-            schade = sent.text
+        if bevat_schadewoord(sent.text, schade_keywords):
+            schade_zinnen.append(sent.text) # steekt alle zinnen met schadewoorden in een list
+
+    # alle gevonden zinnen samenvoegen tot één tekst met een spatie ertussen
+    if schade_zinnen:
+        schade = " ".join(schade_zinnen)
 
     return datum, tijd, locatie, schade
 
@@ -104,7 +198,30 @@ st.title("Schadeclaim via SafeDrive 🚘")
 
 text = st.text_area("Beschrijf wat er gebeurd is")
 
-if st.button("Analyseer tekst"):
+# twee buttons toevoegen die naast elkaar staan
+col1, col2 = st.columns(2)
+
+with col1:
+    analyseer_geklikt = st.button("Analyseer tekst")
+
+with col2:
+    foto_geklikt = st.button("📷 Foto's toevoegen")
+
+# checken als er op de foto knop geklikt wordt -> foto uploader openen
+if foto_geklikt:
+    st.session_state.toon_uploader = True
+
+if st.session_state.get("toon_uploader", False):
+    fotos = st.file_uploader(
+        "Voeg foto's van de schade toe",
+        type=["jgp", "jpeg", "png"], # alleen afbeeldingen toelaten
+        accept_multiple_files= True # meerdere foto's toevoegen per keer is mogelijk
+    )
+    if fotos:
+        st.session_state.data["fotos"] = fotos
+        st.success(f"{len(fotos)} foto('s) toegevoegd!")
+
+if analyseer_geklikt:
 
     datum, tijd, locatie, schade = extract_info(text)
 
