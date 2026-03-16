@@ -65,7 +65,7 @@ def extract_info(text):
 
     # via regex zoeken naar tijdswoorden
     tijdswoorden_patroon = re.search(
-        r'\b(net|zojuist|daarnet|gisteren|eergisteren|vorige week|afgelopen \w+|maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag)\b',
+        r'\b(net|zojuist|daarnet|deze ochtend|gisteren|eergisteren|vorige week|afgelopen \w+|maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag)\b',
         text.lower()
     )
 
@@ -91,7 +91,8 @@ def extract_info(text):
         handmatige_mapping = {
             "net": datetime.today().date(),
             "zojuist": datetime.today().date(),
-            "daarnet": datetime.today().date()
+            "daarnet": datetime.today().date(),
+            "deze ochtend": datetime.today().date()
             }
         
         if gevonden_tijdswoord in handmatige_mapping:
@@ -137,7 +138,7 @@ def extract_info(text):
     # schade detectie
     schade_keywords = [
     # bestaand
-    "deuk", "kras", "schade", "kapot", "bumper", "scheur", "gestolen", "kwijt", "ingeslaan", "gestolen",
+    "deuk", "kras", "schade", "kapot", "bumper", "scheur", "gestolen", "kwijt", "ingeslaan", "gestolen", "eraf", "eruit",
 
     # deuk/vervorming
     "deuken", "deukje", "ingedeukt", "gegedeukt", "gebutst", "buts", "bluts", "geblutst",
