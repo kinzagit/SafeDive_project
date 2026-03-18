@@ -20,7 +20,7 @@ tijd_mapping = {
 }
 
 vandaag = datetime.today().date()
-min_datum = vandaag - timedelta(days=92) # max 3 maanden terug
+min_datum = vandaag - timedelta(days=92) # max 3 maanden terug als datum limiet
 
 if "data" not in st.session_state:
     st.session_state.data = {
@@ -67,14 +67,14 @@ def extract_info(text):
     # via regex zoeken naar tijdswoorden
         # voor datum regex
     tijdswoorden_patroon = re.search(
-        r'\b(net|zojuist|daarnet|deze ochtend|gisteren|eergisteren|vorige week|afgelopen \w+|maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag)\b',
+        r'\b(vandaag|net|zojuist|gisteren|eergisteren|vorige week|afgelopen \w+|maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag)\b',
         text.lower()
     )
         # voor tijd regex apart
-    tijdstip_patroon = re.search(
-        r'\b(deze ochtend|ochtend|middag|namiddag|avond|nacht|deze morgen)\b',
-        text.lower()
-    )
+    #tijdstip_patroon = re.search(
+    #   r'\b(deze ochtend|ochtend|middag|namiddag|avond|nacht|deze morgen)\b',
+    #    text.lower()
+    #)
 
     if datum_patroon:
         # dit plaatst de gevonden match met re.search in een variable.
@@ -96,6 +96,7 @@ def extract_info(text):
         gevonden_tijdswoord = tijdswoorden_patroon.group()
 
         handmatige_mapping = {
+            "vandaag": datetime.today().date(),
             "net": datetime.today().date(),
             "zojuist": datetime.today().date(),
             "daarnet": datetime.today().date(),
@@ -127,15 +128,11 @@ def extract_info(text):
 
     # tijd detectie via mapping als dateparser niets vond
     if not tijd:
-        if tijdstip_patroon:
-            gevonden_tijdstip = tijdstip_patroon.group()
-            tijd = tijd_mapping.get(gevonden_tijdstip)
-        else:
-            lower_text = text.lower()
-            for woord, mapped_time in tijd_mapping.items():
-                if woord in lower_text:
-                    tijd = mapped_time
-                    break
+        lower_text = text.lower()
+        for woord, mapped_time in tijd_mapping.items():
+            if woord in lower_text:
+                tijd = mapped_time
+                break
 
     # locatie detectie
     for ent in doc.ents:
@@ -149,7 +146,8 @@ def extract_info(text):
     # schade detectie
     schade_keywords = [
     # bestaand
-    "deuk", "kras", "schade", "kapot", "bumper", "scheur", "gestolen", "kwijt", "ingeslaan", "gestolen", "eraf", "eruit",
+    "deuk", "kras", "schade", "kapot", "bumper", "scheur", "gestolen", "kwijt", "ingeslaan", 
+    "gestolen", "eraf", "eruit", "gekrast"
 
     # deuk/vervorming
     "deuken", "deukje", "ingedeukt", "gegedeukt", "gebutst", "buts", "bluts", "geblutst",
