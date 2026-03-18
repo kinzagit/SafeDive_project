@@ -11,6 +11,7 @@ nlp = spacy.load("nl_core_news_sm")
 # tijd mapping voor woorden
 tijd_mapping = {
     "ochtend": "09:00",
+    "ochtends": "09:00",
     "morgen": "09:00",
     "middag": "13:00",
     "namiddag": "15:00",
@@ -64,8 +65,14 @@ def extract_info(text):
     datum_patroon = re.search(r'\b(\d{1,2}[-/]\d{1,2}[-/]\d{4})\b', text)
 
     # via regex zoeken naar tijdswoorden
+        # voor datum regex
     tijdswoorden_patroon = re.search(
         r'\b(net|zojuist|daarnet|deze ochtend|gisteren|eergisteren|vorige week|afgelopen \w+|maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag)\b',
+        text.lower()
+    )
+        # voor tijd regex apart
+    tijdstip_patroon = re.search(
+        r'\b(deze ochtend|ochtend|middag|namiddag|avond|nacht|deze morgen)\b',
         text.lower()
     )
 
@@ -120,11 +127,15 @@ def extract_info(text):
 
     # tijd detectie via mapping als dateparser niets vond
     if not tijd:
-        lower_text = text.lower()
-        for woord, mapped_time in tijd_mapping.items():
-            if woord in lower_text:
-                tijd = mapped_time
-                break
+        if tijdstip_patroon:
+            gevonden_tijdstip = tijdstip_patroon.group()
+            tijd = tijd_mapping.get(gevonden_tijdstip)
+        else:
+            lower_text = text.lower()
+            for woord, mapped_time in tijd_mapping.items():
+                if woord in lower_text:
+                    tijd = mapped_time
+                    break
 
     # locatie detectie
     for ent in doc.ents:
