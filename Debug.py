@@ -1,22 +1,17 @@
 import re
 import dateparser
 
-text = "Mijn achterbumper is helemaal ingedeukt en achterruit kapot nadat een idioot tegen mij reed van achteren. Dit gebeurde gisteren op de Utrechtseweg 58 in Utrecht"
+text = "Op 05-03-2026 om 09:05 uur reed een scooter te dicht langs in de Leidsestraat. Linksachter zitten nu krassen en het spatbord is licht ingedeukt."
 
-tijdswoorden_patroon = re.search(
-    r'\b(gisteren|eergisteren|vorige week|afgelopen \w+|maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag)\b',
-    text.lower()
-)
+# Stap 1 - 11u conversie
+text = re.sub(r'\b(\d{1,2})u(\d{2})?\b', lambda m: f"{m.group(1)}:{m.group(2) or '00'}", text)
+print("Na conversie:", text)
 
-print("Gevonden tijdswoord:", tijdswoorden_patroon.group() if tijdswoorden_patroon else None)
+# Stap 2 - tijd patroon zoeken
+tijd_match = re.search(r'\d{1,2}:\d{2}', text)
+print("Gevonden tijdstip:", tijd_match.group() if tijd_match else None)
 
-# Als tijdswoord gevonden, test of dateparser het correct omzet
-if tijdswoorden_patroon:
-    gevonden_tijdswoord = tijdswoorden_patroon.group()
-    parsed = dateparser.parse(gevonden_tijdswoord, languages=["nl"], settings={
-        "DATE_ORDER": "DMY",
-        "PREFER_DATES_FROM": "past"
-    })
-    print("Dateparser resultaat:", parsed)
-    if parsed:
-        print("Datum:", parsed.date())
+# Stap 3 - dateparser met alleen het tijdstip
+if tijd_match:
+    parsed = dateparser.parse(tijd_match.group(), languages=["nl"])
+    print("Dateparser tijdstip:", parsed)

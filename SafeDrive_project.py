@@ -49,9 +49,6 @@ def bevat_schadewoord(zin, keywords, drempel=80):
     return False
 
 def extract_info(text):
-
-    doc = nlp(text)
-
     datum = None
     tijd = None
     locatie = None
@@ -60,6 +57,11 @@ def extract_info(text):
 
     schade_zinnen = []
     locatie_delen = []
+
+    # "11u" of "11u30" omzetten naar "11:00" of "11:30" zodat dateparser het begrijpt
+    text = re.sub(r'\b(\d{1,2})u(\d{2})?\b', lambda m: f"{m.group(1)}:{m.group(2) or '00'}", text)
+
+    doc = nlp(text)  # ← nu verplaatst naar na de conversie
 
     # zoek eerst een datum patroon in de tekst met regex
     datum_patroon = re.search(r'\b(\d{1,2}[-/]\d{1,2}[-/]\d{4})\b', text)
@@ -77,22 +79,26 @@ def extract_info(text):
     #)
 
     if datum_patroon:
-        # dit plaatst de gevonden match met re.search in een variable.
-        # datum_patroon.group() is dus de datum die re.search vind. Bv "25-03-2026"
-        gevonden_datum = datum_patroon.group()        
-
-        # Nu geven we de gevonden datum door aan dateparser zonder de rest van de zin.
-        # settings DATE_ORDER zorgt voor de EU standaard setting 
+        gevonden_datum = datum_patroon.group()
         parsed = dateparser.parse(gevonden_datum, languages=["nl"], settings={"DATE_ORDER": "DMY"})
 
-        # als DMY niet lukt, check of het MDY (Amerikaans formaat) wel lukt
         if not parsed:
             parsed = dateparser.parse(gevonden_datum, languages=["nl"], settings={"DATE_ORDER": "MDY"})
             if parsed:
                 st.info("Datum leek op Amerikaans formaat (MM/DD/YYYY) en werd automatisch omgezet.")
 
+        if parsed:
+            datum = parsed.date()
+
+            # ✅ tijd via regex zoeken in plaats van hele tekst aan dateparser geven
+            tijd_match = re.search(r'\d{1,2}:\d{2}', text)
+            if tijd_match:
+                parsed_tijd = dateparser.parse(tijd_match.group(), languages=["nl"])
+                if parsed_tijd:
+                    if parsed_tijd.time().hour != 0 or parsed_tijd.time().minute != 0:
+                        tijd = parsed_tijd.time()
+
     elif tijdswoorden_patroon:
-        # Gevonden tijdswoord apart aan dateparser geven
         gevonden_tijdswoord = tijdswoorden_patroon.group()
 
         handmatige_mapping = {
@@ -101,30 +107,49 @@ def extract_info(text):
             "zojuist": datetime.today().date(),
             "daarnet": datetime.today().date(),
             "deze ochtend": datetime.today().date()
-            }
+        }
         
         if gevonden_tijdswoord in handmatige_mapping:
             datum = handmatige_mapping[gevonden_tijdswoord]
+
+            # tijd apart proberen uit de tekst te halen
+            tijd_match = re.search(r'\d{1,2}:\d{2}', text)
+            if tijd_match:
+                parsed_tijd = dateparser.parse(tijd_match.group(), languages=["nl"])
+                if parsed_tijd:
+                    if parsed_tijd.time().hour != 0 or parsed_tijd.time().minute != 0:
+                        tijd = parsed_tijd.time()
+
         else:
-            parsed = dateparser.parse(gevonden_tijdswoord, languages=["nl"], settings={
-                    "DATE_ORDER": "DMY",
-                    "PREFER_DATES_FROM": "past"
+            # Bouw zelf "gisteren om 11:00" samen zodat dateparser niet verward raakt
+            tijd_match = re.search(r'\d{1,2}:\d{2}', text[tijdswoorden_patroon.start():])
+            
+            if tijd_match:
+                # tijdswoord + tijd combineren
+                combinatie = f"{gevonden_tijdswoord} om {tijd_match.group()}"
+            else:
+                # geen tijdstip gevonden, alleen het tijdswoord gebruiken
+                combinatie = gevonden_tijdswoord
+
+            parsed = dateparser.parse(combinatie, languages=["nl"], settings={
+                "DATE_ORDER": "DMY",
+                "PREFER_DATES_FROM": "past"
             })
             if parsed:
                 datum = parsed.date()
-                tijd = parsed.time()
+                if parsed.time().hour != 0 or parsed.time().minute != 0:
+                    tijd = parsed.time()
     else:
         # Geen datum patroon gevonden, probeer de hele tekst
         parsed = dateparser.parse(text, languages=["nl"], settings={
             "DATE_ORDER": "DMY", 
             "PREFER_DATES_FROM": "past"
         })
-
-    if parsed:
-        datum = parsed.date()
-        # alleen tijd opslaan als het NIET middernacht is
-        if parsed.time().hour != 0 or parsed.time().minute != 0:
-            tijd = parsed.time()
+        if parsed:
+            datum = parsed.date()
+            # alleen tijd opslaan als het NIET middernacht is
+            if parsed.time().hour != 0 or parsed.time().minute != 0:
+                tijd = parsed.time()
 
     # tijd detectie via mapping als dateparser niets vond
     if not tijd:
@@ -134,10 +159,14 @@ def extract_info(text):
                 tijd = mapped_time
                 break
 
-    # locatie detectie
+    # locatie detectie - tijdswoorden uitsluiten
+    tijdswoorden = {"gisteren", "eergisteren", "vandaag", "maandag", "dinsdag", 
+                    "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag"}
+
     for ent in doc.ents:
         if ent.label_ in ["LOC", "GPE"]:
-            locatie_delen.append(ent.text)
+            if ent.text.lower() not in tijdswoorden:  # tijdswoorden uitsluiten
+                locatie_delen.append(ent.text)
 
     # alle gevonden locaties samenvoegen
     if locatie_delen:
