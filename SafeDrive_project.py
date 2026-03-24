@@ -19,6 +19,7 @@ tijd_mapping = {
     "nacht": "23:00"
 }
 
+# coderen van tijdsindicatie
 vandaag = datetime.today().date()
 min_datum = vandaag - timedelta(days=92) # max 3 maanden terug als datum limiet
 
@@ -48,6 +49,7 @@ def bevat_schadewoord(zin, keywords, drempel=80):
                 return True
     return False
 
+# de functie die tekst uit het ingevoerde tekstvak haalt
 def extract_info(text):
     datum = None
     tijd = None
@@ -61,23 +63,18 @@ def extract_info(text):
     # "11u" of "11u30" omzetten naar "11:00" of "11:30" zodat dateparser het begrijpt
     text = re.sub(r'\b(\d{1,2})u(\d{2})?\b', lambda m: f"{m.group(1)}:{m.group(2) or '00'}", text)
 
-    doc = nlp(text)  # ← nu verplaatst naar na de conversie
+    doc = nlp(text)  
 
     # zoek eerst een datum patroon in de tekst met regex
     datum_patroon = re.search(r'\b(\d{1,2}[-/]\d{1,2}[-/]\d{4})\b', text)
 
     # via regex zoeken naar tijdswoorden
-        # voor datum regex
     tijdswoorden_patroon = re.search(
         r'\b(vandaag|net|zojuist|gisteren|eergisteren|vorige week|afgelopen \w+|maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag)\b',
         text.lower()
     )
-        # voor tijd regex apart
-    #tijdstip_patroon = re.search(
-    #   r'\b(deze ochtend|ochtend|middag|namiddag|avond|nacht|deze morgen)\b',
-    #    text.lower()
-    #)
 
+    # dit checked voor USA datum formaat en zet het om naar DMY
     if datum_patroon:
         gevonden_datum = datum_patroon.group()
         parsed = dateparser.parse(gevonden_datum, languages=["nl"], settings={"DATE_ORDER": "DMY"})
@@ -97,10 +94,11 @@ def extract_info(text):
                 if parsed_tijd:
                     if parsed_tijd.time().hour != 0 or parsed_tijd.time().minute != 0:
                         tijd = parsed_tijd.time()
-
+    #als datum niet gevonden is, zoekt de code via de tijdswoorden in de tekst. Als hij één van de tijdswoorden vindt dan hard coderen wat dit is
     elif tijdswoorden_patroon:
         gevonden_tijdswoord = tijdswoorden_patroon.group()
 
+        #hier kan je de woorden zelf hard coderen wat ze zijn. Voorlopig alles naar 'vandaag' gecodeert
         handmatige_mapping = {
             "vandaag": datetime.today().date(),
             "net": datetime.today().date(),
@@ -112,7 +110,7 @@ def extract_info(text):
         if gevonden_tijdswoord in handmatige_mapping:
             datum = handmatige_mapping[gevonden_tijdswoord]
 
-            # tijd apart proberen uit de tekst te halen
+            # tijd apart proberen uit de tekst te halen (als bv 12:55)
             tijd_match = re.search(r'\d{1,2}:\d{2}', text)
             if tijd_match:
                 parsed_tijd = dateparser.parse(tijd_match.group(), languages=["nl"])
@@ -261,6 +259,7 @@ def extract_info(text):
     return datum, tijd, locatie, schade
 
 
+#hier begint de front-end van Streamlit
 st.title("Schadeclaim via SafeDrive 🚘")
 
 text = st.text_area("Beschrijf wat er gebeurd is")
